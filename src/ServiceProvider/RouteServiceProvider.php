@@ -3,8 +3,8 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD\ServiceProvider;
@@ -19,7 +19,7 @@ class Router extends RouteCollection
     protected function concat($callback)
     {
         if (is_string($callback)) {
-            return '\\Http\\Controller\\' . $callback;
+            return '\\Controller\\'.$callback;
         }
 
         return $callback;
@@ -40,6 +40,11 @@ class Router extends RouteCollection
         return parent::patch($path, $this->concat($callback), $defaults);
     }
 
+    public function put($path, $callback, array $defaults = [])
+    {
+        return parent::put($path, $this->concat($callback), $defaults);
+    }
+
     public function delete($path, $callback, array $defaults = [])
     {
         return parent::delete($path, $this->concat($callback), $defaults);
@@ -51,8 +56,16 @@ class Router extends RouteCollection
     }
 }
 
+/**
+ * Class RouteServiceProvider.
+ */
 class RouteServiceProvider implements ServiceProviderInterface
 {
+    /**
+     * @param Container $container
+     *
+     * @return mixed
+     */
     public function register(Container $container)
     {
         $router = new Router();
@@ -61,6 +74,6 @@ class RouteServiceProvider implements ServiceProviderInterface
         $container->add('router', $router);
         $container->add('dispatcher', $dispatcher);
 
-        include $container->get('app')->getAppPath() . '/config/routes.php';
+        include app()->getPath().'/config/routes.php';
     }
 }

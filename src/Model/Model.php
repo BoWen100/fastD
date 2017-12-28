@@ -3,37 +3,34 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD\Model;
 
-
-use medoo;
-
 /**
- * Class Model
- * @package FastD\ServiceProvider
+ * Class Model.
  */
 class Model
 {
     /**
-     * @var medoo
+     * @var Database
      */
     protected $db;
 
     /**
      * Model constructor.
-     * @param medoo $medoo
+     *
+     * @param Database $database
      */
-    public function __construct(medoo $medoo)
+    public function __construct(Database $database)
     {
-        $this->db = $medoo;
+        $this->db = $database;
     }
 
     /**
-     * @return medoo
+     * @return Database
      */
     public function getDatabase()
     {

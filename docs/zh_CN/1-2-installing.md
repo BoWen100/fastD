@@ -2,14 +2,29 @@
 
 > 如果使用浏览器访问入口，需要给项目配置虚拟域名，将路径指向项目的 web 目录
 
+:bangbang:推荐配合 Vagrant 虚拟机使用，能够更快适应开发环境。
+
+### Linux 环境
+
 ##### 1 如果没有安装 Composer 
 
 ```
-curl -sS https://getcomposer.org/installer | php
-mv composer.phar /usr/local/bin/composer
+$ curl -sS https://getcomposer.org/installer | php
+$ mv composer.phar /usr/local/bin/composer
+$ chown +x /usr/local/bin/composer
 ```
 
+:soon:国内镜像，加速 composer 安装
+
+```
+composer config -g repo.packagist composer https://packagist.laravel-china.org
+```
+
+更多使用方式请前往: [Composer国内镜像](https://laravel-china.org/composer)
+
 ##### 2 安装 Swoole 扩展
+
+:bangbang:推荐使用1.9.9以上版本
 
 ```
 $ pecl install swoole
@@ -19,28 +34,28 @@ $ pecl install swoole
 
 ```
 $ composer create-project "fastd/dobee" dobee -vvv 
+$ cd dobee && composer install -vvv
 ```
 
-##### 4 启动服务器
 
-通过浏览器访问 PHP 内置 WEB 服务器或访问当前web目录
+##### 4 启动内置 Web 服务器
 
-**启动内置 Web 服务器**
+> 推荐在开发环境下使用，可脱离 Apache 和 Nginx，更易使用
 
 ```shell
 $ cd dobee
-$ php -S 127.0.0.1:9527 -t ./web 
+$ php -S 127.0.0.1:9527 -t ./web
+$ curl http://127.0.0.1:9527/
 ```
 
-**启动 Swoole**
+##### 启动 Swoole 服务器
 
 ```php
-$ php bin/server 
+$ php bin/server start
+$ curl http://127.0.0.1:9527/
 ```
 
-浏览器访问 `127.0.0.1:9527` 即可得到结果
-
-### Windows 配置
+### Windows 环境
 
 因为 swoole 没有太多考虑 windows 环境，所以推荐使用虚拟机环境进行开发，Windows 仅支持传统 PHP 模式。
 
@@ -50,22 +65,28 @@ $ php bin/server
 $ composer create-project "fastd/dobee" dobee -vvv 
 ```
 
-##### 2 启动服务器
-
-**启动内置 Web 服务器**
+##### 2 PHP 内置 Web 服务器
 
 ```shell
 $ cd dobee
-$ php -S 127.0.0.1:9527 -t ./web 
+$ php -S 127.0.0.1:9527 -t ./web
+$ curl http://127.0.0.1:9527/
 ```
 
-通过浏览器访问 PHP 内置 WEB 服务器或通过 apache/nginx 访问当前web目录
+##### 3 配置 apache 虚拟域名
 
-### Nginx 配置
+修改 httpd.conf，开启 vhost.conf，添加虚拟与名到 vhost.conf 文件中，修改目录地址。
 
-搭配推荐使用 Nginx 作为代理入口，通过 Nginx 转发到后端服务器处理。
+```apacheconfig
+<VirtualHost *:80>
+    DocumentRoot "/path/to/web"
+    ServerName example.com
+</VirtualHost>
+```
 
-##### FPM
+映射本地 ip 到虚拟域名，修改 System32 下面的 hosts 文件
+
+##### 4 配置 nginx 配置
 
 ```
 server
@@ -86,7 +107,7 @@ server
 }
 ```
 
-##### Swoole
+### Nginx + Swoole 代理 (推荐使用 Linux 环境)
 
 ```
 server 
@@ -98,5 +119,7 @@ server
     }
 }
 ```
+
+不建议完全替代 Nginx + FPM，毕竟有 Nginx 作为前端服务器，灵活和扩展性会大大提高。
 
 下一节: [目录结构](1-3-directory-structure.md)

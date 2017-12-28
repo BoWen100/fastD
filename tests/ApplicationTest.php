@@ -3,119 +3,147 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
-
+use FastD\Application;
+use FastD\TestCase;
 use ServiceProvider\FooServiceProvider;
 use Symfony\Component\Cache\Adapter\FilesystemAdapter;
 
 class ApplicationTest extends TestCase
 {
-    public function testApplicationInitialize()
+    public function createApplication()
     {
-        $app = $this->createApplication();
+        $app = new Application(__DIR__.'/../app');
 
-        $this->assertEquals(__DIR__, $app->getAppPath());
-        $this->assertEquals('fast-d', $app->getName());
-        $this->assertEquals('PRC', $app['time']->getTimeZone()->getName());
-        $this->assertTrue($app->isBooted());
+        return $app;
     }
 
-    public function testHandleRequest()
+    public function testApplicationBootstrap()
     {
-        $app = $this->createApplication();
-        $response = $app->handleRequest($this->createRequest('GET', '/'));
-        $this->assertEquals(json_encode(['foo' => 'bar']), $response->getBody());
-    }
-
-    public function testHandleDynamicRequest()
-    {
-        $app = $this->createApplication();
-        $response = $app->handleRequest($this->createRequest('GET', '/foo/bar'));
-        $this->assertEquals(json_encode(['foo' => 'bar']), $response->getBody());
-        $response = $app->handleRequest($this->createRequest('GET', '/foo/foobar'));
-        $this->assertEquals(json_encode(['foo' => 'foobar']), $response->getBody());
-    }
-
-    public function testHandleMiddlewareRequest()
-    {
-        $app = $this->createApplication();
-        $response = $app->handleRequest($this->createRequest('POST', '/foo/bar'));
-        $this->assertEquals(json_encode(['foo' => 'middleware']), $response->getBody());
-        $response = $app->handleRequest($this->createRequest('POST', '/foo/not'));
-        $this->assertEquals(json_encode(['foo' => 'bar']), $response->getBody());
+        $this->assertEquals('fast-d', $this->app->getName());
+        $this->assertTrue($this->app->isBooted());
     }
 
     public function testServiceProvider()
     {
-        $app = $this->createApplication();
+        $this->app->register(new FooServiceProvider());
+        $this->assertEquals('foo', $this->app['foo']->name);
+    }
 
-        $app->register(new FooServiceProvider());
-        $this->assertEquals('foo', $app['foo']->name);
+    public function testServiceProviderAutomateConsole()
+    {
+        $this->app->register(new FooServiceProvider());
+        $consoles = config()->get('consoles');
+        $consoles = array_unique($consoles);
+        $this->assertEquals([
+            'Console\Demo', 'ServiceProvider\DemoConsole',
+        ], $consoles);
     }
 
     public function testConfigurationServiceProvider()
     {
-        $app = $this->createApplication();
-
-        $this->assertEquals('fast-d', $app->get('config')->get('name'));
-        $this->assertEquals('bar', config()->get('foo'));
+        $this->assertEquals('fast-d', $this->app->get('config')->get('name'));
+        $this->assertNull(config()->get('foo'));
+        $this->assertFalse(config()->has('not_exists_key'));
+        $this->assertEquals(config()->get('foo', 'default'), 'default');
+        $this->assertEquals(config()->get('env.foo'), 'bar');
     }
 
     public function testLoggerServiceProvider()
     {
-        $app = $this->createApplication();
+        $logFile = app()->getPath().'/runtime/logs/info.log';
 
-        $response = $app->handleRequest($this->createRequest('GET', '/'));
+        $request = $this->request('GET', '/');
+        $response = $this->app->handleRequest($request);
+        $this->assertEquals(200, $response->getStatusCode());
+        $this->assertFileExists($logFile);
 
-        $app->handleResponse($response);
-
-        $this->assertTrue(file_exists(app()->getAppPath() . '/storage/info.log'));
-
-        $app->run($this->createRequest('GET', '/not'));
-
-        $this->assertTrue(file_exists(app()->getAppPath() . '/storage/error.log'));
+        $request = $this->request('GET', '/not/found');
+        $response = $this->app->handleRequest($request);
+        $this->assertEquals(404, $response->getStatusCode());
+        $this->assertFileExists($logFile);
     }
 
     public function testCacheServiceProvider()
     {
-        $app = $this->createApplication();
-
-        $this->assertInstanceOf(FilesystemAdapter::class, $app->get('cache'));
+        $this->assertInstanceOf(FilesystemAdapter::class, $this->app->get('cache')->getCache('default'));
+        $foo = cache()->getItem('foo');
+        if (!$foo->isHit()) {
+            $foo->set('bar');
+        }
+        $this->assertEquals('bar', $foo->get());
     }
 
-    public function testModel()
+    public function testHandleRequest()
     {
-        $app = $this->createApplication();
-
-        $response = $app->handleRequest($this->createRequest('GET', '/model'));
-
-        echo $response->getBody();
+        $response = $this->app->handleRequest($this->request('GET', '/'));
+        $this->equalsJson($response, ['foo' => 'bar']);
     }
 
-    public function testAuth()
+    public function testHandleMiddleware()
     {
-        $app = $this->createApplication();
+        $request = $this->request('GET', '/');
+        $response = $this->handleRequest($request);
+        $this->assertArrayHasKey('x-cache', $response->getHeaders());
+    }
 
-        $response = $app->handleRequest($this->createRequest('GET', '/auth'));
+    public function testHandleException()
+    {
+        $logFile = app()->getPath().'/runtime/logs/info.log';
+        $exception = new LogicException('handle exception');
+        $response = $this->app->handleException($exception);
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $response);
+        $this->app->add('response', $response);
+        $this->app->add('request', new \FastD\Http\ServerRequest('GET', '/'));
+        $this->app->shutdown(new \FastD\Http\ServerRequest('GET', '/'), $response);
+        $this->equalsStatus($response, 500);
+        $this->assertFileExists($logFile);
+    }
 
-        echo $response->getBody();
+    public function testHandleResponse()
+    {
+        $response = json([
+            'foo' => 'bar',
+        ]);
+        $this->app->handleResponse($response);
+        $this->expectOutputString((string) $response->getBody());
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $response);
+    }
 
-        $this->assertEquals(json_encode([
-            'msg' => 'not allow access',
-            'code' => 401
-        ]), (string) $response->getBody());
+    public function testApplicationShutdown()
+    {
+        $request = $this->request('GET', '/');
+        $response = $this->handleRequest($request);
+        $this->app->shutdown($request, $response);
+    }
 
-        $response = $app->handleRequest($this->createRequest('GET', 'http://foo:bar@example.com/auth', [], null, [
-            'PHP_AUTH_USER' => 'foo',
-            'PHP_AUTH_PW' => 'bar'
-        ]));
+    public function testOrdinaryControllerLogic()
+    {
+        $request = $this->request('GET', '/');
+        $response = $this->handleRequest($request);
+        $this->equalsStatus($response, 200);
+    }
 
-        echo $response->getBody();
+    public function testAbortControllerLogic()
+    {
+        $request = $this->request('GET', '/abort');
+        $response = $this->handleRequest($request);
+        $this->equalsStatus($response, 400);
+    }
 
-        $this->assertEquals(json_encode([
-            'foo' => 'bar'
-        ]), (string) $response->getBody());
+    public function tearDown()
+    {
+        $logFile = app()->getPath().'/runtime/logs/info.log';
+        if (file_exists($logFile)) {
+            unlink($logFile);
+        }
+    }
+
+    public function testSymfonyResponse()
+    {
+        app()->handleResponse(new \Symfony\Component\HttpFoundation\Response('hello'));
+        $this->expectOutputString('hello');
     }
 }

@@ -3,8 +3,8 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD\ServiceProvider;
@@ -12,10 +12,20 @@ namespace FastD\ServiceProvider;
 use FastD\Container\Container;
 use FastD\Container\ServiceProviderInterface;
 
+/**
+ * Class SwooleServiceProvider.
+ */
 class SwooleServiceProvider implements ServiceProviderInterface
 {
+    /**
+     * @param Container $container
+     *
+     * @return mixed
+     */
     public function register(Container $container)
     {
-        $container->get('config')->load(app()->getAppPath() . '/config/server.php');
+        config()->merge([
+            'server' => load(app()->getPath().'/config/server.php'),
+        ]);
     }
 }

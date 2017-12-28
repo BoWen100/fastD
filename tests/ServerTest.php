@@ -3,21 +3,24 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
-
-
+use FastD\Application;
 use FastD\Server;
 
-
-class ServerTest extends TestCase
+class ServerTest extends FastD\TestCase
 {
+    public function createApplication()
+    {
+        $app = new Application(__DIR__.'/../app');
+
+        return $app;
+    }
+
     public function createServer()
     {
-        $app = $this->createApplication();
-
-        return new Server($app);
+        return new Server($this->createApplication());
     }
 
     public function testServerInit()
@@ -25,10 +28,5 @@ class ServerTest extends TestCase
         $server = $this->createServer();
 
         $server->bootstrap();
-
-        $this->assertEquals($server->getSwoole()->setting, [
-            'pid_file' => '/tmp/fast-d.pid',
-            'worker_num' => 10
-        ]);
     }
 }

@@ -3,56 +3,42 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD\ServiceProvider;
 
-
 use FastD\Container\Container;
 use FastD\Container\ServiceProviderInterface;
-use Monolog\Handler\HandlerInterface;
-use Monolog\Handler\StreamHandler;
-use Monolog\Logger;
+use Monolog\Formatter\LineFormatter;
+use Monolog\Handler\AbstractHandler;
 
 /**
- * Class LoggerServiceProvider
- * @package FastD\ServiceProvider
+ * Class LoggerServiceProvider.
  */
 class LoggerServiceProvider implements ServiceProviderInterface
 {
     /**
      * @param Container $container
-     * @return void
      */
     public function register(Container $container)
     {
-        $config = config();
-        $logger = new Logger($config->get('name'));
+        $handlers = config()->get('log', []);
+        $path = app()->getPath().'/runtime/logs';
 
-        $log = $config->get('log');
-        $path = !isset($log['path']) ? null : $log['path'];
-        if (empty($path) || '/' !== $path{0}) {
-            $path = app()->getAppPath() . '/' . $path;
+        foreach ($handlers as $handler) {
+            list($handle, $name, $level, $format) = array_pad($handler, 4, null);
+            if (is_string($handle)) {
+                $handle = new $handle($path.'/'.$name, $level);
+            }
+            if ($handle instanceof AbstractHandler) {
+                if (null === $format) {
+                    $format = new LineFormatter();
+                }
+                $handle->setFormatter(is_string($format) ? new $format() : $format);
+                Logger()->pushHandler($handle);
+            }
         }
-
-        if (!isset($log['info'])) {
-            $logger->pushHandler(new StreamHandler($path . '/info.log', Logger::INFO));
-        } else if (is_string($log['info'])) {
-            $logger->pushHandler(new $log['info']($path . '/info.log', Logger::INFO));
-        } else if ($log['info'] instanceof HandlerInterface) {
-            $logger->pushHandler($log['info']);
-        }
-
-        if (!isset($log['error'])) {
-            $logger->pushHandler(new StreamHandler($path . '/error.log', Logger::WARNING));
-        } else if (is_string($log['error'])) {
-            $logger->pushHandler(new $log['error']($path . '/error.log', Logger::WARNING));
-        } else if ($log['error'] instanceof HandlerInterface) {
-            $logger->pushHandler($log['error']);
-        }
-
-        $container->add('logger', $logger);
     }
 }

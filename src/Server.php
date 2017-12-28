@@ -3,57 +3,85 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD;
 
-use Exception;
-use FastD\Http\Response;
-use FastD\Http\SwooleServerRequest;
 use FastD\ServiceProvider\SwooleServiceProvider;
-use FastD\Swoole\Server\Http;
-use Psr\Http\Message\ServerRequestInterface;
-use swoole_http_request;
-use swoole_http_response;
+use FastD\Servitization\Server\HTTPServer;
+use swoole_server;
+use Symfony\Component\Console\Input\InputInterface;
 
 /**
- * Class App
- *
- * @package FastD
+ * Class App.
  */
-class Server extends Http
+class Server
 {
+    /**
+     * @var Application
+     */
     protected $application;
 
     /**
+     * @var \FastD\Swoole\Server
+     */
+    protected $server;
+
+    /**
      * Server constructor.
+     *
      * @param Application $application
      */
     public function __construct(Application $application)
     {
-        $this->application = $application;
-
         $application->register(new SwooleServiceProvider());
 
-        parent::__construct($application->getName(), $application->get('config')->get('listen'));
+        $server = config()->get('server.class', HTTPServer::class);
 
-        $this->configure($application->get('config')->get('options'));
+        $this->server = $server::createServer(
+            $application->getName(),
+            config()->get('server.host'),
+            config()->get('server.options', [])
+        );
 
-        $this->initMultiPorts()->initProcesses();
+        $application->add('server', $this->server);
+
+        $this->initListeners();
+        $this->initProcesses();
+    }
+
+    /**
+     * @return swoole_server
+     */
+    public function getSwoole()
+    {
+        return $this->server->getSwoole();
+    }
+
+    /**
+     * @return Swoole\Server
+     */
+    public function bootstrap()
+    {
+        return $this->server->bootstrap();
     }
 
     /**
      * @return $this
      */
-    public function initMultiPorts()
+    public function initListeners()
     {
-        $ports = $this->application->get('config')->get('ports', []);
-        foreach ($ports as $port) {
-            $class = $port['class'];
-            $this->listen(new $class('ports', $port['listen'], $port['options']));
+        $listeners = config()->get('server.listeners', []);
+        foreach ($listeners as $listener) {
+            $this->server->listen(new $listener['class'](
+                app()->getName().' ports',
+                $listener['host'],
+                isset($listener['options']) ? $listener['options'] : []
+            ));
         }
+
         return $this;
     }
 
@@ -62,45 +90,105 @@ class Server extends Http
      */
     public function initProcesses()
     {
-        $processes = $this->application->get('config')->get('processes', []);
+        $processes = config()->get('server.processes', []);
         foreach ($processes as $process) {
-            $this->process(new $process);
+            $this->server->process(new $process(app()->getName().' process'));
         }
+
         return $this;
     }
 
     /**
-     * @param swoole_http_request $swooleRequet
-     * @param swoole_http_response $swooleResponse
+     * @return $this
      */
-    public function onRequest(swoole_http_request $swooleRequet, swoole_http_response $swooleResponse)
+    public function daemon()
     {
-        try {
-            $swooleRequestServer = SwooleServerRequest::createServerRequestFromSwoole($swooleRequet);
-            $response = $this->doRequest($swooleRequestServer);
-        } catch (Exception $e) {
-            $response = $this->application->handleException($e);
-        }
+        $this->server->daemon();
 
-        foreach ($response->getHeaders() as $key => $header) {
-            $swooleResponse->header($key, $response->getHeaderLine($key));
-        }
-
-        foreach ($swooleRequestServer->getCookieParams() as $key => $cookieParam) {
-            $swooleResponse->cookie($key, $cookieParam);
-        }
-
-        $swooleResponse->status($response->getStatusCode());
-        $swooleResponse->end((string) $response->getBody());
-        unset($response, $swooleRequestServer, $swooleResponse);
+        return $this;
     }
 
     /**
-     * @param ServerRequestInterface $serverRequest
-     * @return Response
+     * @return int
      */
-    public function doRequest(ServerRequestInterface $serverRequest)
+    public function start()
     {
-        return app()->handleRequest($serverRequest);
+        $this->bootstrap();
+
+        return $this->server->start();
+    }
+
+    /**
+     * @return int
+     */
+    public function stop()
+    {
+        return $this->server->shutdown();
+    }
+
+    /**
+     * @return int
+     */
+    public function restart()
+    {
+        return $this->server->restart();
+    }
+
+    /**
+     * @return int
+     */
+    public function reload()
+    {
+        return $this->server->reload();
+    }
+
+    /**
+     * @return int
+     */
+    public function status()
+    {
+        return $this->server->status();
+    }
+
+    /**
+     * @param array $dir
+     *
+     * @return int
+     */
+    public function watch(array $dir = ['.'])
+    {
+        return $this->server->watch($dir);
+    }
+
+    /**
+     * @param InputInterface $input
+     */
+    public function run(InputInterface $input)
+    {
+        if ($input->hasParameterOption(['--daemon', '-d'], true)) {
+            $this->daemon();
+        }
+
+        switch ($input->getArgument('action')) {
+            case 'start':
+                if ($input->hasParameterOption(['--dir'])) {
+                    $this->watch([$input->getOption('dir')]);
+                } else {
+                    $this->start();
+                }
+
+                break;
+            case 'stop':
+                $this->stop();
+
+                break;
+            case 'reload':
+                $this->reload();
+
+                break;
+            case 'status':
+            default:
+                $this->status();
+        }
     }
 }

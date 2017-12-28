@@ -3,16 +3,14 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD\Model;
 
-
 /**
- * Class ModelFactory
- * @package FastD\ServiceProvider
+ * Class ModelFactory.
  */
 class ModelFactory
 {
@@ -23,13 +21,15 @@ class ModelFactory
 
     /**
      * @param $name
+     * @param $key
+     *
      * @return Model
      */
-    public static function createModel($name)
+    public static function createModel($name, $key = 'default')
     {
         if (!isset(static::$models[$name])) {
-            $modelName = 'Model\\' . ucfirst($name) . 'Model';
-            static::$models[$name] = new $modelName(database());
+            $modelName = 'Model\\'.ucfirst($name).'Model';
+            static::$models[$name] = new $modelName(database($key));
         }
 
         return static::$models[$name];

@@ -3,38 +3,34 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD;
 
-use DateTime;
-use DateTimeZone;
+use ErrorException;
 use Exception;
+use FastD\Config\Config;
 use FastD\Container\Container;
 use FastD\Container\ServiceProviderInterface;
 use FastD\Http\HttpException;
 use FastD\Http\Response;
 use FastD\Http\ServerRequest;
-use FastD\ServiceProvider\RouteServiceProvider;
+use FastD\Logger\Logger;
 use FastD\ServiceProvider\ConfigServiceProvider;
-use FastD\ServiceProvider\LoggerServiceProvider;
+use FastD\Servitization\Client\Client;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Symfony\Component\Debug\Exception\FatalThrowableError;
 use Throwable;
 
 /**
- * Class Application
- * @package FastD
+ * Class Application.
  */
 class Application extends Container
 {
-    /**
-     * The FastD version.
-     *
-     * @const string
-     */
-    const VERSION = '3.0.0';
+    const VERSION = 'v3.2.0';
 
     /**
      * @var Application
@@ -44,22 +40,12 @@ class Application extends Container
     /**
      * @var string
      */
-    protected $appPath;
+    protected $path;
 
     /**
      * @var string
      */
-    protected $name = 'Fast-D';
-
-    /**
-     * @var string
-     */
-    protected $environment = 'local';
-
-    /**
-     * @var bool
-     */
-    protected $debug = true;
+    protected $name;
 
     /**
      * @var bool
@@ -69,15 +55,15 @@ class Application extends Container
     /**
      * AppKernel constructor.
      *
-     * @param $appPath
+     * @param $path
      */
-    public function __construct($appPath)
+    public function __construct($path)
     {
-        $this->appPath = $appPath;
+        $this->path = $path;
 
         static::$app = $this;
 
-        $this['app'] = $this;
+        $this->add('app', $this);
 
         $this->bootstrap();
     }
@@ -93,14 +79,6 @@ class Application extends Container
     /**
      * @return bool
      */
-    public function isDebug()
-    {
-        return $this->debug;
-    }
-
-    /**
-     * @return bool
-     */
     public function isBooted()
     {
         return $this->booted;
@@ -109,149 +87,153 @@ class Application extends Container
     /**
      * @return string
      */
-    public function getEnvironment()
+    public function getPath()
     {
-        return $this->environment;
+        return $this->path;
     }
 
     /**
-     * @return string
-     */
-    public function getAppPath()
-    {
-        return $this->appPath;
-    }
-
-    /**
-     * @return void
+     * Application bootstrap.
      */
     public function bootstrap()
     {
         if (!$this->booted) {
-            $config = include $this->appPath . '/config/app.php';
-
-            $this->environment = $config['environment'];
-
-            $this->debug = 'prod' == $this->environment ? false : true;
+            $config = load($this->path.'/config/app.php');
 
             $this->name = $config['name'];
 
-            $this['time'] = new DateTime('now',
-                new DateTimeZone(isset($config['timezone']) ? $config['timezone'] : 'PRC')
-            );
-            $this['config'] = $config;
+            $this->add('config', new Config($config));
+            $this->add('logger', new Logger($this->name));
+            $this->add('client', new Client());
 
-            $this->registerServicesProviders((array) $config['services']);
-
+            $this->registerExceptionHandler();
+            $this->registerServicesProviders($config['services']);
             unset($config);
             $this->booted = true;
         }
     }
 
+    protected function registerExceptionHandler()
+    {
+        error_reporting(-1);
+
+        set_exception_handler([$this, 'handleException']);
+
+        set_error_handler(function ($level, $message, $file = '', $line = 0) {
+            throw new ErrorException($message, 0, $level, $file, $line);
+        });
+    }
+
     /**
      * @param ServiceProviderInterface[] $services
-     * @return void
      */
     protected function registerServicesProviders(array $services)
     {
         $this->register(new ConfigServiceProvider());
-        $this->register(new RouteServiceProvider());
-        $this->register(new LoggerServiceProvider());
         foreach ($services as $service) {
-            $this->register(new $service);
+            $this->register(new $service());
         }
     }
 
     /**
-     * @param Response $response
-     * @return int
+     * @param ServerRequestInterface $request
+     *
+     * @return Response|\Symfony\Component\HttpFoundation\Response
      */
-    public function handleResponse(Response $response)
+    public function handleRequest(ServerRequestInterface $request)
+    {
+        $this->add('request', $request);
+
+        try {
+            $response = $this->get('dispatcher')->dispatch($request);
+            logger()->log(Logger::INFO, $response->getStatusCode(), [
+                'method' => $request->getMethod(),
+                'path' => $request->getUri()->getPath(),
+            ]);
+        } catch (Exception $exception) {
+            $response = $this->handleException($exception);
+        } catch (Throwable $exception) {
+            $exception = new FatalThrowableError($exception);
+            $response = $this->handleException($exception);
+        }
+
+        $this->add('response', $response);
+
+        return $response;
+    }
+
+    /**
+     * @param Response|\Symfony\Component\HttpFoundation\Response $response
+     */
+    public function handleResponse($response)
     {
         $response->send();
-        // Not debug environment. Save log in application.
-        if (!$this->isDebug()) {
-            $request = $this->get('request');
-            $log = [
-                'statusCode' => $response->getStatusCode(),
-                'params' => [
-                    'get' => $request->getQueryParams(),
-                    'post' => $request->getParsedBody(),
-                ]
-            ];
-
-            if ($response->isSuccessful()) {
-                logger()->addInfo($request->getMethod() . ' ' . $request->getUri()->getPath(), $log);
-            } else {
-                logger()->addError($request->getMethod() . ' ' . $request->getUri()->getPath(), $log);
-            }
-        }
-
-        return 0;
     }
 
     /**
-     * @param ServerRequestInterface|null $serverRequest
-     * @return Response
-     */
-    public function handleRequest(ServerRequestInterface $serverRequest = null)
-    {
-        if (null === $serverRequest) {
-            $serverRequest = ServerRequest::createServerRequestFromGlobals();
-        }
-
-        $this->add('request', $serverRequest);
-
-        return $this->get('dispatcher')->dispatch($serverRequest);
-    }
-
-    /**
-     * @param Exception $e
+     * @param $e
+     *
      * @return Response
      */
     public function handleException($e)
     {
-        $statusCode = $e->getCode();
-        if ($e instanceof HttpException) {
-            $statusCode = $e->getStatusCode();
+        if (!$e instanceof Exception) {
+            $e = new FatalThrowableError($e);
         }
 
-        $data = [
-            'msg' => $e->getMessage(),
-            'code' => $e->getCode(),
-        ];
-
-        if ($this->isDebug()) {
-            $data['file'] = $e->getFile();
-            $data['line'] = $e->getLine();
-            $data['trace'] = explode("\n", $e->getTraceAsString());
+        try {
+            $trace = call_user_func(config()->get('exception.log'), $e);
+        } catch (Exception $exception) {
+            $trace = [
+                'original' => explode("\n", $e->getTraceAsString()),
+                'handler' => explode("\n", $exception->getTraceAsString()),
+            ];
         }
 
-        $response = json($data);
+        $this->add('exception', $e);
 
-        if (!array_key_exists($statusCode, $response::$statusTexts)) {
-            $statusCode = 500;
+        logger()->log(Logger::ERROR, $e->getMessage(), $trace);
+
+        $statusCode = ($e instanceof HttpException) ? $e->getStatusCode() : $e->getCode();
+
+        if (!array_key_exists($statusCode, Response::$statusTexts)) {
+            $statusCode = Response::HTTP_INTERNAL_SERVER_ERROR;
         }
 
-        return $response->withStatus($statusCode);
+        return json(call_user_func(config()->get('exception.response'), $e), $statusCode);
     }
 
     /**
-     * @param ServerRequestInterface|null $serverRequest
+     * Started application.
+     *
      * @return int
      */
-    public function run(ServerRequestInterface $serverRequest = null)
+    public function run()
     {
-        try {
-            $response = $this->handleRequest($serverRequest);
-        } catch (HttpException $exception) {
-            $response = $this->handleException($exception);
-        } catch (Exception $exception) {
-            $response = $this->handleException($exception);
-        } catch (Throwable $exception) {
-            $response = $this->handleException($exception);
-        }
+        $request = ServerRequest::createServerRequestFromGlobals();
 
-        return $this->handleResponse($response);
+        $response = $this->handleRequest($request);
+
+        $this->handleResponse($response);
+
+        return $this->shutdown($request, $response);
+    }
+
+    /**
+     * @param ServerRequestInterface                                       $request
+     * @param ResponseInterface|\Symfony\Component\HttpFoundation\Response $response
+     *
+     * @return int
+     */
+    public function shutdown(ServerRequestInterface $request, $response)
+    {
+        $this->offsetUnset('request');
+        $this->offsetUnset('response');
+        if ($this->offsetExists('exception')) {
+            $this->offsetUnset('exception');
+        }
+        unset($request, $response);
+
+        return 0;
     }
 }

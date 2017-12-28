@@ -3,39 +3,29 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD\ServiceProvider;
 
-
 use FastD\Container\Container;
 use FastD\Container\ServiceProviderInterface;
-use medoo;
+use FastD\Pool\DatabasePool;
 
 /**
- * Class DatabaseServiceProvider
- * @package FastD\ServiceProvider
+ * Class DatabaseServiceProvider.
  */
 class DatabaseServiceProvider implements ServiceProviderInterface
 {
-    protected $db;
-
     /**
      * @param Container $container
-     * @return void
      */
     public function register(Container $container)
     {
-        $config = config()->get('database');
+        $config = config()->get('database', []);
 
-        $container->add('database', function () use ($config) {
-            if (null === $this->db) {
-                $this->db = new medoo($config);
-            }
-            return $this->db;
-        });
+        $container->add('database', new DatabasePool($config));
 
         unset($config);
     }

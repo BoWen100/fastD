@@ -3,32 +3,35 @@
  * @author    jan huang <bboyjanhuang@gmail.com>
  * @copyright 2016
  *
- * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @see      https://www.github.com/janhuang
+ * @see      https://fastdlabs.com
  */
 
 namespace FastD\ServiceProvider;
 
-use FastD\Config\Config;
 use FastD\Container\Container;
 use FastD\Container\ServiceProviderInterface;
 
 /**
- * Class ConfigServiceProvider
- * @package FastD\Provider
+ * Class ConfigServiceProvider.
  */
 class ConfigServiceProvider implements ServiceProviderInterface
 {
     /**
      * @param Container $container
-     * @return void
+     *
+     * @return mixed
      */
     public function register(Container $container)
     {
-        $config = new Config($container->get('config'));
-
-        $config->load(app()->getAppPath() . '/config/config.php');
-
-        $container->add('config', $config);
+        $dir = app()->getPath().'/config';
+        $container->get('config')->load($dir.'/config.php');
+        $container->get('config')->merge([
+            'database' => load($dir.'/database.php'),
+            'cache' => load($dir.'/cache.php'),
+        ]);
+        if (file_exists(app()->getPath().'/.env.yml')) {
+            config()->merge(load(app()->getPath().'/.env.yml'));
+        }
     }
 }

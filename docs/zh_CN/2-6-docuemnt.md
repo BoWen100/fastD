@@ -1,6 +1,6 @@
-# API 文档
+# API 文档 (已废弃，可手动集成)
 
-FastD 框架中已经默认集成 [swagger](https://github.com/zircote/swagger-php) 文档，仅需要通过以下命令即可生成文档，亦可通过集成的方式将文档集中到一个中心管理。
+* [swagger](https://github.com/zircote/swagger-php)
 
 ```php
 php bin/console doc
@@ -21,7 +21,7 @@ php bin/console doc
  * @copyright 2016
  *
  * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @link      https://fastdlabs.com
  */
 
 namespace Http\Controller;
@@ -156,7 +156,7 @@ class IndexController
  * @copyright 2016
  *
  * @link      https://www.github.com/janhuang
- * @link      http://www.fast-d.cn/
+ * @link      https://fastdlabs.com
  */
 
 namespace Document;
@@ -222,6 +222,6 @@ class User
 
 效果: 
 
-[![效果](doc.png)]
+[![效果](../assets/doc.png)]
 
 下一节: [应用配置](3-1-configuration.md)
